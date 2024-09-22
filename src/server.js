@@ -7,7 +7,7 @@ const redis = require('redis');
 
 const routes = require("./routes")
 const server = express()
-const port = 3000;
+const port = 8080;
 
 server.use(bodyParser.json())
 server.use(cors())
