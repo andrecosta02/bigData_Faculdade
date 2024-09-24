@@ -122,9 +122,12 @@ module.exports = {
 
 
           body('data.description')
-            .notEmpty().withMessage('description cannot be empty')
-            .isString().withMessage('description must be a string')
-            .isLength({ min: 10, max: 60 }).withMessage('description must be between 10 and 60 characters')
+            .notEmpty()
+              .withMessage('description cannot be empty')
+            .isString()
+              .withMessage('description must be a string')
+            .isLength({ min: 10, max: 60 })
+              .withMessage('description must be between 10 and 60 characters')
         ];
 
         await Promise.all(registerValidation.map(validation => validation.run(req)))
