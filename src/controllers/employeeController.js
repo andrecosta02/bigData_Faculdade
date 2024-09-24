@@ -3,7 +3,7 @@ const redis = require('redis');
 const client = require('../services/employeeService');
 const { validationResult } = require('express-validator');
 const { body, param } = require('express-validator');
-
+const https = require('https');
 
 // client.set('testKey', 'testValue')
 //   .then(() => {
@@ -72,7 +72,26 @@ module.exports = {
     register: async (req, res) => {
         const { id, data } = req.body;
 
-        // const name = data?.name;
+        const name = data?.name;
+        const cep = data?.cep;
+
+        let logradouro = "";
+        let bairro = "";
+        let localidade = "";
+        let uf = "";
+
+        // getAddressByCep(cep)
+        // .then((address) => {
+        //   // console.log(address);
+        //   logradouro = address.logradouro
+        //   bairro = address.bairro
+        //   localidade = address.localidade
+        //   uf = address.uf
+
+        // })
+        // .catch((error) => {
+        //   console.error('Erro:', error.message);
+        // });
 
         const registerValidation = [
           body('id')
@@ -91,6 +110,17 @@ module.exports = {
             .isLength({ min: 3, max: 60 })
               .withMessage('name must be between 3 and 60 characters'),
 
+          body('data.cep')
+            .notEmpty()
+              .withMessage('cep cannot be empty')
+            .isString()
+              .withMessage('cep must be a string')
+            .isLength({ min: 8, max: 8 })
+              .withMessage('CEP must be exactly 8 characters long')
+            .matches(/^\d+$/)
+              .withMessage('CEP must contain only numbers'),
+
+
           body('data.description')
             .notEmpty().withMessage('description cannot be empty')
             .isString().withMessage('description must be a string')
@@ -104,12 +134,28 @@ module.exports = {
         if (!errors.isEmpty()) {
           return res.status(422).json({ statusCode: 400, message: 'Erro de validação', errors: errors.array() })
         }
-
+      
         try {
+          // Chama a função de obtenção do endereço e espera sua resolução
+          const address = await getAddressByCep(cep);
+  
+          logradouro = address.logradouro;
+          bairro = address.bairro;
+          localidade = address.localidade;
+          uf = address.uf;
+  
+          // Como `data` é um objeto, adiciona as novas propriedades ao objeto
+          data.logradouro = logradouro;
+          data.bairro = bairro;
+          data.localidade = localidade;
+          data.uf = uf;
+  
+          // Salva no Redis
           await client.set(id, JSON.stringify(data));
           res.status(201).send('Item created');
         } catch (err) {
-          res.status(500).send(err);
+            console.error('Erro:', err.message);
+            res.status(500).send(err);
         }
     },
 
@@ -137,3 +183,41 @@ module.exports = {
 }
 
 
+
+
+
+function getAddressByCep(cep) {
+  return new Promise((resolve, reject) => {
+    // Formata o CEP removendo qualquer caractere que não seja número
+    const formattedCep = cep.replace(/\D/g, '');
+    
+    // Faz a requisição à API ViaCEP
+    const url = `https://viacep.com.br/ws/${formattedCep}/json/`;
+
+    https.get(url, (resp) => {
+      let data = '';
+
+      // Coletando dados em blocos
+      resp.on('data', (chunk) => {
+        data += chunk;
+      });
+
+      // Quando a resposta estiver completa
+      resp.on('end', () => {
+        const addressData = JSON.parse(data);
+
+        // Verifica se houve erro (por exemplo, se o CEP não foi encontrado)
+        if (addressData.erro) {
+          reject(new Error('CEP não encontrado.'));
+        } else {
+          // Retorna apenas as informações solicitadas
+          const { logradouro, bairro, localidade, uf } = addressData;
+          resolve({ logradouro, bairro, localidade, uf });
+        }
+      });
+
+    }).on('error', (err) => {
+      reject(err);
+    });
+  });
+}
