@@ -3,6 +3,7 @@ const redis = require('redis');
 const client = require('../services/employeeService');
 const { validationResult } = require('express-validator');
 const { body, param } = require('express-validator');
+const { employeeValidations } = require('../validations')
 const https = require('https');
 
 // client.set('testKey', 'testValue')
@@ -19,169 +20,169 @@ const https = require('https');
 
 module.exports = {
 
-    listAll: async (req, res) => {
+  listAll: async (req, res) => {
+    try {
+        // console.log('Fetching all data from Redis');
+
+        // Obtém todas as chaves armazenadas no Redis
+        const keys = await client.keys('*');
+
+        if (keys.length === 0) {
+            return res.status(404).send('No records found');
+        }
+
+        // console.log(keys);
+
+        // Utiliza `mGet` para obter os valores de todas as chaves
+        const records = await client.mGet(keys);
+
+        // Combina as chaves e os valores em um array de objetos com { id, value }
+        let parsedRecords = keys.map((key, index) => ({
+            id: key,
+            value: JSON.parse(records[index]) // Converte cada valor de string para JSON
+        }));
+
+        // Ordena os registros com base no 'id' (convertido para número, se aplicável)
+        parsedRecords.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
+
+        // console.log('Data fetched from Redis:', parsedRecords);
+
+        // Retorna os dados no formato de lista de { id, value }
+        res.status(200).json(parsedRecords);
+    } catch (err) {
+        res.status(500).send(err);
+    }
+  },
+
+  listOne: async (req, res) => {
+      const { employeeId } = req.params;
       try {
-          console.log('Fetching all data from Redis');
-
-          // Obtém todas as chaves armazenadas no Redis
-          const keys = await client.keys('*');
-
-          if (keys.length === 0) {
-              return res.status(404).send('No records found');
-          }
-
-          // console.log(keys);
-
-          // Utiliza `mGet` para obter os valores de todas as chaves
-          const records = await client.mGet(keys);
-
-          // Combina as chaves e os valores em um array de objetos com { id, value }
-          let parsedRecords = keys.map((key, index) => ({
-              id: key,
-              value: JSON.parse(records[index]) // Converte cada valor de string para JSON
-          }));
-
-          // Ordena os registros com base no 'id' (convertido para número, se aplicável)
-          parsedRecords.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
-
-          // console.log('Data fetched from Redis:', parsedRecords);
-
-          // Retorna os dados no formato de lista de { id, value }
-          res.status(200).json(parsedRecords);
+        // console.log('Fetching data for ID:', employeeId);
+        const reply = await client.get(employeeId);
+        // console.log('Data fetched from Redis:', reply); // Dentro do GET
+        if (reply) {
+          res.status(200).send(JSON.parse(reply));
+        } else {
+          res.status(404).send('Item not found');
+        }
       } catch (err) {
-          res.status(500).send(err);
+        res.status(500).send(err);
       }
-    },
+  },
 
-    listOne: async (req, res) => {
-        const { employeeId } = req.params;
-        try {
-          console.log('Fetching data for ID:', employeeId);
-          const reply = await client.get(employeeId);
-          console.log('Data fetched from Redis:', reply); // Dentro do GET
-          if (reply) {
-            res.status(200).send(JSON.parse(reply));
-          } else {
-            res.status(404).send('Item not found');
-          }
-        } catch (err) {
-          res.status(500).send(err);
-        }
-    },
+  register: async (req, res) => {
+    const { data } = req.body;
 
-    register: async (req, res) => {
-        const { id, data } = req.body;
+    // await Promise.all(registerValidation.map(validation => validation.run(req)))
+    await Promise.all(employeeValidations.map(validation => validation.run(req)))
 
-        const name = data?.name;
-        const cep = data?.cep;
+    const errors = validationResult(req)
 
-        let logradouro = "";
-        let bairro = "";
-        let localidade = "";
-        let uf = "";
+    if (!errors.isEmpty()) {
+      return res.status(422).json({ statusCode: 400, message: 'Erro de validação', errors: errors.array() })
+    }
 
-        // getAddressByCep(cep)
-        // .then((address) => {
-        //   // console.log(address);
-        //   logradouro = address.logradouro
-        //   bairro = address.bairro
-        //   localidade = address.localidade
-        //   uf = address.uf
+    try {
+      // Gera a matrícula automaticamente com auto-incremento
+      const matricula = await client.incr('employee_id'); // 'employee_id' é a chave usada para auto-incremento
+      // console.log('Matrícula gerada:', matricula);
 
-        // })
-        // .catch((error) => {
-        //   console.error('Erro:', error.message);
-        // });
+      // Chama a função de obtenção do endereço e espera sua resolução
+      const address = await getAddressByCep(data.cep);
+      // console.log('Endereço obtido:', address);
 
-        const registerValidation = [
-          body('id')
-            .notEmpty()
-              .withMessage('id cannot be empty')
-            .isString()
-              .withMessage('id must be a string')
-            .isLength({ min: 1, max: 6 })
-              .withMessage('id must be between 3 and 60 characters'),
+      data.logradouro = address.logradouro;
+      data.bairro = address.bairro;
+      data.cidade = address.localidade;
+      data.uf = address.uf;
 
-          body('data.name')
-            .notEmpty()
-              .withMessage('name cannot be empty')
-            .isString()
-              .withMessage('name must be a string')
-            .isLength({ min: 3, max: 60 })
-              .withMessage('name must be between 3 and 60 characters'),
+      // Adiciona a matrícula gerada ao objeto 'data'
+      data.matricula = matricula.toString().padStart(6, '0'); // Garantindo que a matrícula tenha 6 dígitos
 
-          body('data.cep')
-            .notEmpty()
-              .withMessage('cep cannot be empty')
-            .isString()
-              .withMessage('cep must be a string')
-            .isLength({ min: 8, max: 8 })
-              .withMessage('CEP must be exactly 8 characters long')
-            .matches(/^\d+$/)
-              .withMessage('CEP must contain only numbers'),
+      // console.log('Dados finais:', data);
 
+      // Salva no Redis
+      await client.set(matricula.toString(), JSON.stringify(data)); // Matrícula convertida para string
+      res.status(201).send('Item created');
+    } catch (err) {
+        console.error('Erro:', err.message);
+        res.status(500).send(err);
+    }
+  },
 
-          body('data.description')
-            .notEmpty()
-              .withMessage('description cannot be empty')
-            .isString()
-              .withMessage('description must be a string')
-            .isLength({ min: 10, max: 60 })
-              .withMessage('description must be between 10 and 60 characters')
-        ];
-
-        await Promise.all(registerValidation.map(validation => validation.run(req)))
-    
-        const errors = validationResult(req)
-
-        if (!errors.isEmpty()) {
-          return res.status(422).json({ statusCode: 400, message: 'Erro de validação', errors: errors.array() })
-        }
-      
-        try {
-          // Chama a função de obtenção do endereço e espera sua resolução
-          const address = await getAddressByCep(cep);
   
-          logradouro = address.logradouro;
-          bairro = address.bairro;
-          localidade = address.localidade;
-          uf = address.uf;
-  
-          // Como `data` é um objeto, adiciona as novas propriedades ao objeto
-          data.logradouro = logradouro;
-          data.bairro = bairro;
-          data.localidade = localidade;
-          data.uf = uf;
-  
-          // Salva no Redis
-          await client.set(id, JSON.stringify(data));
-          res.status(201).send('Item created');
-        } catch (err) {
-            console.error('Erro:', err.message);
-            res.status(500).send(err);
-        }
-    },
 
-    update: async (req, res) => {
-        const { employeeId } = req.params;
-        const { data } = req.body;
-        try {
-          await client.set(employeeId, JSON.stringify(data));
-          res.status(200).send('Item updated');
-        } catch (err) {
-          res.status(500).send(err);
-        }
-    },
 
-    delete: async (req, res) => {
-        const { employeeId } = req.params;
-        try {
-          await client.del(employeeId);
-          res.status(200).send('Item deleted');
-        } catch (err) {
-          res.status(500).send(err);
+
+
+  // update: async (req, res) => {
+  //   const { employeeId } = req.params;
+  //   const { data } = req.body;
+
+  //   await Promise.all(employeeValidations.map(validation => validation.run(req)))
+
+  //   const errors = validationResult(req);
+
+  //   if (!errors.isEmpty()) {
+  //       return res.status(422).json({ statusCode: 400, message: 'Erro de validação', errors: errors.array() })
+  //   }
+
+  //   try {
+  //     await client.set(employeeId, JSON.stringify(data));
+  //     res.status(200).send('Item updated');
+  //   } catch (err) {
+  //     res.status(500).send(err);
+  //   }
+  // },
+  update: async (req, res) => {
+    const { matricula } = req.params;  // Usando matrícula como identificador
+    const { data } = req.body;
+
+    await Promise.all(employeeValidations.map(validation => validation.run(req)))
+
+    const errors = validationResult(req);
+
+    if (!errors.isEmpty()) {
+        return res.status(422).json({ statusCode: 400, message: 'Erro de validação', errors: errors.array() })
+    }
+
+    try {
+        // Obtém os dados existentes para o funcionário pela matrícula
+        console.log('Matrícula:', matricula);
+        console.log('Dados existentes:', existingData);
+        console.log('Dados para atualização:', data);
+        const existingData = await client.get(matricula);
+        if (!existingData) {
+            return res.status(404).json({ message: 'Employee not found' });
         }
-    },
+
+        const updatedData = JSON.parse(existingData);
+
+
+
+        // Atualiza apenas os campos que foram enviados
+        Object.assign(updatedData, data);
+
+        // Salva os dados atualizados no Redis
+        await client.set(matricula, JSON.stringify(updatedData));
+        res.status(200).send('Item updated');
+    } catch (err) {
+        console.error('Erro:', err.message);
+        res.status(500).send(err);
+    }
+  },
+
+
+
+  delete: async (req, res) => {
+      const { employeeId } = req.params;
+      try {
+        await client.del(employeeId);
+        res.status(200).send('Item deleted');
+      } catch (err) {
+        res.status(500).send(err);
+      }
+  },
 
 }
 
