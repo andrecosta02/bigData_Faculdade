@@ -110,11 +110,6 @@ module.exports = {
     }
   },
 
-
-
-
-
-
   update: async (req, res) => {
     const { employeeId } = req.params;
     const { data } = req.body;
