@@ -1,6 +1,6 @@
 
 const redis = require('redis');
-const client = require('../services/employeeService');
+const client = require('../services/redisService');
 const { validationResult } = require('express-validator');
 const { body, param } = require('express-validator');
 const { employeeValidations } = require('../validations')
@@ -12,35 +12,35 @@ module.exports = {
 
   listAll: async (req, res) => {
     try {
-        // console.log('Fetching all data from Redis');
+      // console.log('Fetching all data from Redis');
 
-        // Obtém todas as chaves armazenadas no Redis
-        const keys = await client.keys('*');
+      // Obtém todas as chaves armazenadas no Redis
+      const keys = await client.keys('*');
 
-        if (keys.length === 0) {
-            return res.status(404).send('No records found');
-        }
+      if (keys.length === 0) {
+        return res.status(404).send('No records found');
+      }
 
-        // console.log(keys);
+      // console.log(keys);
 
-        // Utiliza `mGet` para obter os valores de todas as chaves
-        const records = await client.mGet(keys);
+      // Utiliza `mGet` para obter os valores de todas as chaves
+      const records = await client.mGet(keys);
 
-        // Combina as chaves e os valores em um array de objetos com { id, value }
-        let parsedRecords = keys.map((key, index) => ({
-            id: key,
-            value: JSON.parse(records[index]) // Converte cada valor de string para JSON
-        }));
+      // Combina as chaves e os valores em um array de objetos com { id, value }
+      let parsedRecords = keys.map((key, index) => ({
+        id: key,
+        value: JSON.parse(records[index]) // Converte cada valor de string para JSON
+      }));
 
-        // Ordena os registros com base no 'id' (convertido para número, se aplicável)
-        parsedRecords.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
+      // Ordena os registros com base no 'id' (convertido para número, se aplicável)
+      parsedRecords.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
 
-        // console.log('Data fetched from Redis:', parsedRecords);
+      // console.log('Data fetched from Redis:', parsedRecords);
 
-        // Retorna os dados no formato de lista de { id, value }
-        res.status(200).json(parsedRecords);
+      // Retorna os dados no formato de lista de { id, value }
+      res.status(200).json(parsedRecords);
     } catch (err) {
-        res.status(500).send(err);
+      res.status(500).send(err);
     }
   },
 
@@ -79,8 +79,8 @@ module.exports = {
       await client.set(matricula.toString(), JSON.stringify(data)); // Matrícula convertida para string
       res.status(201).send('Item created');
     } catch (err) {
-        console.error('Erro:', err.message);
-        res.status(500).send(err);
+      console.error('Erro:', err.message);
+      res.status(500).send(err);
     }
   },
 
