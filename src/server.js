@@ -2,7 +2,6 @@ require("dotenv").config({path:"./variable.env"})
 const express = require("express")
 const cors = require("cors")
 const bodyParser = require("body-parser")
-// const request = require("request")
 const redis = require('redis');
 
 const routes = require("./routes")
