@@ -1,4 +1,4 @@
-require("dotenv").config({path:"./variable.env"})
+require("dotenv-safe").config();
 const express = require("express")
 const cors = require("cors")
 const bodyParser = require("body-parser")
@@ -6,13 +6,12 @@ const redis = require('redis');
 
 const routes = require("./routes")
 const server = express()
-const port = 8080;
 
 server.use(bodyParser.json())
 server.use(cors())
 
 server.use("/employee", routes)
 
-server.listen(port, () => {
-    console.log(`Server running on port ${port}`);
+server.listen(process.env.PORT_API, () => {
+    console.log(`Server running on port ${process.env.PORT_API}`);
 });

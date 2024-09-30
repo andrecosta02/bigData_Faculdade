@@ -6,23 +6,11 @@ const { body, param } = require('express-validator');
 const { employeeValidations } = require('../validations')
 const https = require('https');
 
-// client.set('testKey', 'testValue')
-//   .then(() => {
-//     return client.get('testKey');
-// })
-//   .then((value) => {
-//     console.log('Value from Redis:', value); // Deve retornar 'testValue'
-// })
-//   .catch((err) => {
-//     console.error('Redis error:', err);
-// });
-
 
 module.exports = {
 
   listAll: async (req, res) => {
     try {
-      // console.log('Fetching all data from Redis');
 
       // Obtém todas as chaves armazenadas no Redis
       const keys = await client.keys('*');
@@ -30,8 +18,6 @@ module.exports = {
       if (keys.length === 0) {
         return res.status(404).send('No records found');
       }
-
-      // console.log(keys);
 
       // Utiliza `mGet` para obter os valores de todas as chaves
       const records = await client.mGet(keys);
@@ -45,8 +31,6 @@ module.exports = {
       // Ordena os registros com base no 'id' (convertido para número, se aplicável)
       parsedRecords.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
 
-      // console.log('Data fetched from Redis:', parsedRecords);
-
       // Retorna os dados no formato de lista de { id, value }
       res.status(200).json(parsedRecords);
     } catch (err) {
@@ -57,9 +41,7 @@ module.exports = {
   listOne: async (req, res) => {
     const { employeeId } = req.params;
     try {
-      // console.log('Fetching data for ID:', employeeId);
       const reply = await client.get(employeeId);
-      // console.log('Data fetched from Redis:', reply); // Dentro do GET
       if (reply) {
         res.status(200).send(JSON.parse(reply));
       } else {
@@ -85,11 +67,9 @@ module.exports = {
     try {
       // Gera a matrícula automaticamente com auto-incremento
       const matricula = await client.incr('employee_id'); // 'employee_id' é a chave usada para auto-incremento
-      // console.log('Matrícula gerada:', matricula);
 
       // Chama a função de obtenção do endereço e espera sua resolução
       const address = await getAddressByCep(data.cep);
-      // console.log('Endereço obtido:', address);
 
       data.logradouro = address.logradouro;
       data.bairro = address.bairro;
@@ -99,7 +79,6 @@ module.exports = {
       // Adiciona a matrícula gerada ao objeto 'data'
       data.matricula = matricula.toString().padStart(6, '0'); // Garantindo que a matrícula tenha 6 dígitos
 
-      // console.log('Dados finais:', data);
 
       // Salva no Redis
       await client.set(matricula.toString(), JSON.stringify(data)); // Matrícula convertida para string

@@ -1,8 +1,8 @@
 const redis = require('redis');
+require("dotenv-safe").config();
 
-// Configuração do Redis
 const client = redis.createClient({
-    url: 'redis://127.0.0.1:6379'
+    url: process.env.URL_REDIS
 });
 
 client.connect().catch(console.error);
